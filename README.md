@@ -3,7 +3,15 @@
     GitHub Contributions Widget for iNiR
 </h1>
 
-A desktop widget for **iNiR** (powered by Quickshell) that displays your GitHub contribution graph right on your desktop, similar to your GitHub profile card.
+<p align="center">
+  <a href="https://github.com/snowarch/iNiR">
+    <img src="https://img.shields.io/badge/Designed%20for-iNiR-7289da?style=for-the-badge&logo=linux&logoColor=white" alt="iNiR Widget">
+  </a>
+</p>
+
+<p align="center">
+  A desktop widget for <b>iNiR</b> (powered by Quickshell) that displays your GitHub contribution graph right on your desktop, similar to your GitHub profile card.
+</p>
 
 ## Features
 
