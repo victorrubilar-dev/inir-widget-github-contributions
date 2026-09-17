@@ -1,0 +1,9 @@
+{
+  "id": "github-contributions",
+  "name": "GitHub Contributions",
+  "description": "Gráfico de contribuciones de GitHub, como el de tu perfil.",
+  "icon": "code",
+  "version": "1.0.0",
+  "author": "Korossuh",
+  "entry": "widget.qml"
+}
