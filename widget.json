@@ -1,9 +1,64 @@
 {
-  "id": "github-contributions",
   "name": "GitHub Contributions",
-  "description": "Gráfico de contribuciones de GitHub, como el de tu perfil.",
   "icon": "code",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Korossuh",
-  "entry": "widget.qml"
+  "description": "Gráfico de contribuciones de GitHub, como el de tu perfil.",
+  "category": "system",
+  "main": "Github-contributions.qml",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "colorMode": "auto",
+    "dim": 0,
+    "x": 300,
+    "y": 300,
+    "username": "",
+    "weeks": 53,
+    "cellSize": 11,
+    "cellSpacing": 3,
+    "colorTheme": "classic",
+    "showMonthLabels": true,
+    "showLegend": true,
+    "showTotal": true,
+    "refreshMinutes": 60,
+    "surfaceStyle": "card",
+    "padding": 12,
+    "spacing": 8
+  },
+  "configKeys": {
+    "username": { "type": "string", "default": "", "label": "GitHub username" },
+    "weeks": { "type": "int", "default": 53, "min": 8, "max": 53, "step": 1, "label": "Weeks shown" },
+    "cellSize": { "type": "int", "default": 11, "min": 6, "max": 18, "step": 1, "label": "Cell size" },
+    "cellSpacing": { "type": "int", "default": 3, "min": 1, "max": 8, "step": 1, "label": "Cell spacing" },
+    "colorTheme": {
+      "type": "string",
+      "default": "classic",
+      "label": "Color theme",
+      "options": [
+        { "label": "Classic", "value": "classic" },
+        { "label": "Theme", "value": "theme" }
+      ]
+    },
+    "showMonthLabels": { "type": "bool", "default": true, "label": "Show month labels" },
+    "showLegend": { "type": "bool", "default": true, "label": "Show legend" },
+    "showTotal": { "type": "bool", "default": true, "label": "Show total" },
+    "refreshMinutes": { "type": "int", "default": 60, "min": 5, "max": 720, "step": 5, "label": "Refresh (minutes)" },
+    "surfaceStyle": {
+      "type": "string",
+      "default": "card",
+      "label": "Surface style",
+      "options": [
+        { "label": "Card", "value": "card" },
+        { "label": "Pill", "value": "pill" },
+        { "label": "Outline", "value": "outline" },
+        { "label": "Minimal", "value": "minimal" }
+      ]
+    },
+    "padding": { "type": "int", "default": 12, "min": 0, "max": 32, "step": 1, "label": "Padding" },
+    "spacing": { "type": "int", "default": 8, "min": 0, "max": 32, "step": 1, "label": "Spacing" }
+  },
+  "resizableAxes": { "uniform": "widgetScale" },
+  "defaultSize": { "width": 560, "height": 190 }
 }
