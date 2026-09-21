@@ -39,13 +39,13 @@
 1. Clone this repository:
 
    ```bash
-   git clone [https://github.com/victorrubilar-dev/inir-github-contributions.git]
+   git clone https://github.com/victorrubilar-dev/inir-github-contributions.git
    ```
 
-2. Move it to your iNiR widgets folder:
+2. Move it to your iNiR widgets folder: (The name **github-contributions** is very important)
 
    ```bash
-   mv inir-github-contributions ~/.config/inir/widgets/github-contributions
+   cp inir-github-contributions ~/.config/inir/widgets/github-contributions
    ```
 
 ## Configuration
