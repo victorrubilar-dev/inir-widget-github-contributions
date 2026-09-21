@@ -1,19 +1,8 @@
-// GitHub Contributions widget for iNiR / Quickshell
-// Fetches data from https://github-contributions-api.jogruber.de
-//
-// Mejoras aplicadas:
-// - Sistema de usuario con validación, normalización y estado explícito
-//   (borrador local en el popover + Apply/Clear, sin spam a la API).
-// - Estilo con tokens de Appearance (sin colores hardcodeados) y estados
-//   vacíos / carga / error diferenciados.
-// - Buenas prácticas: helpers puros, clamp de config, cancelación de
-//   peticiones, timeout, respeto a powerActive y rutas de config derivadas
-//   de configEntryName.
-
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
+import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import qs
 import qs.services
@@ -25,7 +14,6 @@ import qs.modules.background.widgets
 AbstractBackgroundWidget {
     id: root
 
-    // ── Config ──────────────────────────────────────────────────────
     configEntryName: "custom.github-contributions"
     defaultConfig: ({
         placementStrategy: "free",
@@ -38,12 +26,12 @@ AbstractBackgroundWidget {
         showMonthLabels: true,
         showLegend: true,
         showTotal: true,
+        showAvatar: true,
         refreshMinutes: 60,
         surfaceStyle: "card", padding: 12, spacing: 8,
         x: 300, y: 300
     })
 
-    // ── Constantes (evitan magic numbers) ───────────────────────────
     readonly property string apiBase: "https://github-contributions-api.jogruber.de/v4/"
     readonly property int maxUsernameLength: 39
     readonly property int requestTimeoutMs: 15000
@@ -52,16 +40,17 @@ AbstractBackgroundWidget {
     readonly property int minRefreshMinutes: 5
     readonly property int maxRefreshMinutes: 720
 
-    // Paleta clásica de GitHub (dato de marca, no token de tema).
     readonly property var classicPalette: ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"]
 
-    // ── Config derivada (con clamp y fallbacks null-safe) ───────────
     readonly property string cfgSurfaceStyle: _readConfigKey("surfaceStyle") ?? "card"
+
+    readonly property bool solidSurface: root.cfgSurfaceStyle === "card" || root.cfgSurfaceStyle === "pill"
+    readonly property color fg: root.solidSurface ? Appearance.colors.colOnLayer1 : root.colText
     readonly property int pad: Math.round(clampInt(_readConfigKey("padding"), 0, 32, 12) * scaleFactor)
     readonly property int itemSpacing: Math.round(clampInt(_readConfigKey("spacing"), 0, 32, 8) * scaleFactor)
 
     readonly property string cfgUsernameRaw: (_readConfigKey("username") ?? "").toString()
-    // Nombre normalizado: única fuente de verdad para API y UI.
+
     readonly property string cfgUsername: normalizeUsername(root.cfgUsernameRaw)
     readonly property bool hasUsername: root.cfgUsername.length > 0
     readonly property bool isUsernameValid: usernameError(root.cfgUsernameRaw) === ""
@@ -73,9 +62,10 @@ AbstractBackgroundWidget {
     readonly property bool cfgShowMonthLabels: _readConfigKey("showMonthLabels") ?? true
     readonly property bool cfgShowLegend: _readConfigKey("showLegend") ?? true
     readonly property bool cfgShowTotal: _readConfigKey("showTotal") ?? true
+    readonly property bool cfgShowAvatar: _readConfigKey("showAvatar") ?? true
     readonly property int cfgRefreshMinutes: clampInt(_readConfigKey("refreshMinutes"), root.minRefreshMinutes, root.maxRefreshMinutes, 60)
+    readonly property real microTextScale: Math.max(root.scaleFactor, 0.7)
 
-    // ── Estado ──────────────────────────────────────────────────────
     property var weeksModel: []
     property var monthLabels: []
     property int totalContributions: 0
@@ -92,10 +82,11 @@ AbstractBackgroundWidget {
     implicitWidth: contentColumn.implicitWidth + pad * 2
     implicitHeight: contentColumn.implicitHeight + pad * 2
     resizableAxes: ({ uniform: "widgetScale" })
-    resizeMinWidth: 220
-    resizeMinHeight: 110
+    resizeMinWidth: 540
+    resizeMinHeight: 145
+    resizeMaxWidth: 1200
+    resizeMaxHeight: 800
 
-    // ── Helpers de config (no hardcodear la ruta) ───────────────────
     function configPath(key) {
         return "background.widgets." + root.configEntryName + "." + key
     }
@@ -111,8 +102,6 @@ AbstractBackgroundWidget {
         return Math.max(min, Math.min(max, n))
     }
 
-    // ── Sistema de usuario ──────────────────────────────────────────
-    // Normaliza: recorta espacios y una @ inicial ("@user" -> "user").
     function normalizeUsername(raw) {
         let s = (raw ?? "").toString().trim()
         if (s.startsWith("@"))
@@ -120,7 +109,6 @@ AbstractBackgroundWidget {
         return s.replace(/\s+/g, "")
     }
 
-    // "" = válido. Mensajes en español para mostrar inline.
     function usernameError(raw) {
         const s = normalizeUsername(raw)
         if (s.length === 0)
@@ -136,7 +124,6 @@ AbstractBackgroundWidget {
         return ""
     }
 
-    // Llamado por el popover con el borrador. Devuelve true si se guardó.
     function applyUsername(raw) {
         const err = usernameError(raw)
         if (err !== "")
@@ -156,10 +143,8 @@ AbstractBackgroundWidget {
         root.stateText = ""
     }
 
-    // ── Red ─────────────────────────────────────────────────────────
     function requestRefresh(manual) {
-        // Ahorro de energía: el refresco automático se omite cuando el
-        // shell pausa los widgets; el refresco manual siempre se permite.
+
         if (!manual && !root.powerActive)
             return
         root.fetchContributions()
@@ -194,7 +179,7 @@ AbstractBackgroundWidget {
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return
             if (root._activeXhr !== xhr)
-                return // respuesta de una petición ya cancelada
+                return
             root._activeXhr = null
             fetchTimeout.stop()
             root.loading = false
@@ -258,8 +243,6 @@ AbstractBackgroundWidget {
         }
     }
 
-    // Refetch con debounce: evita doble petición en el arranque
-    // (Timer triggeredOnStart + cambio inicial de binding) y reentradas.
     Timer {
         id: fetchDebounce
         interval: 300
@@ -267,7 +250,6 @@ AbstractBackgroundWidget {
         onTriggered: root.requestRefresh(false)
     }
 
-    // Refetch cuando cambia el usuario guardado.
     onCfgUsernameChanged: fetchDebounce.restart()
     Component.onDestruction: root.abortRequest()
 
@@ -279,7 +261,6 @@ AbstractBackgroundWidget {
         onTriggered: fetchDebounce.restart()
     }
 
-    // ── Grid ────────────────────────────────────────────────────────
     function buildGrid(list) {
         if (!list || list.length === 0) {
             root.weeksModel = []
@@ -352,13 +333,11 @@ AbstractBackgroundWidget {
         return n.toLocaleString(Qt.locale())
     }
 
-    // ── Popover de edición ──────────────────────────────────────────
     editPopoverContent: Component {
         ColumnLayout {
             id: popoverRoot
             spacing: 8
 
-            // Borrador local: no toca la config hasta pulsar Aplicar.
             property string draft: root.cfgUsername
             property string draftError: root.usernameError(root.cfgUsernameRaw)
             readonly property bool draftDirty: normalizeForCompare(popoverRoot.draft) !== root.cfgUsername
@@ -381,7 +360,7 @@ AbstractBackgroundWidget {
             Connections {
                 target: root
                 function onCfgUsernameChanged() {
-                    // Sincroniza si el cambio vino de fuera (p. ej. ajustes).
+
                     if (popoverRoot.normalizeForCompare(popoverRoot.draft) === root.cfgUsername)
                         return
                     if (usernameField && usernameField.activeFocus)
@@ -408,14 +387,15 @@ AbstractBackgroundWidget {
                     Layout.preferredWidth: 170
                     text: popoverRoot.draft
                     placeholderText: "usuario-de-github"
-                    maximumLength: root.maxUsernameLength + 1 // +1 para la @ opcional
+                    maximumLength: root.maxUsernameLength + 1
                     inputMethodHints: Qt.ImhLowercaseOnly | Qt.ImhNoPredictiveText
+                    selectByMouse: true
                     onTextChanged: {
                         popoverRoot.draft = text
                         popoverRoot.refreshDraftError()
                     }
                     onAccepted: {
-                        // El guardado dispara onCfgUsernameChanged -> fetchDebounce.
+
                         if (popoverRoot.canApply)
                             root.applyUsername(popoverRoot.draft)
                     }
@@ -433,7 +413,7 @@ AbstractBackgroundWidget {
                     enabled: popoverRoot.canApply
                     opacity: enabled ? 1 : 0.4
                     downAction: () => {
-                        // El guardado dispara onCfgUsernameChanged -> fetchDebounce.
+
                         root.applyUsername(popoverRoot.draft)
                     }
                     contentItem: MaterialSymbol {
@@ -491,12 +471,58 @@ AbstractBackgroundWidget {
                 text: popoverRoot.draftError !== ""
                     ? popoverRoot.draftError
                     : popoverRoot.draftDirty
-                        ? "Pulsa ✓ o Enter para guardar @" + root.normalizeUsername(popoverRoot.draft)
+                        ? "Pulsa ✓ para guardar @" + root.normalizeUsername(popoverRoot.draft)
                         : root.hasUsername ? "@" + root.cfgUsername + " · guardado" : "Sin usuario guardado"
             }
 
+            RowLayout {
+                spacing: 6
+                Layout.fillWidth: true
+                MaterialSymbol {
+                    text: "keyboard_hide"
+                    iconSize: 16
+                    color: ColorUtils.applyAlpha(Appearance.colors.colOnLayer2, 0.7)
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: ColorUtils.applyAlpha(Appearance.colors.colOnLayer2, 0.7)
+                    text: "El escritorio no recibe teclado: pega con clic derecho y pulsa ✓."
+                }
+            }
+
+            RippleButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+                buttonRadius: Appearance.rounding.small
+                colBackground: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.12)
+                colBackgroundHover: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.20)
+                colRipple: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.16)
+                downAction: () => GlobalStates.openSettingsPage(14)
+                contentItem: RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 6
+                    MaterialSymbol {
+                        text: "settings"
+                        iconSize: 16
+                        color: Appearance.colors.colPrimary
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    StyledText {
+                        text: "Escribir usuario en Ajustes"
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colPrimary
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+                StyledToolTip { text: "Abre Ajustes → Widgets, con teclado" }
+            }
+
             GridLayout {
-                columns: 3
+                columns: 2
                 columnSpacing: 4
                 rowSpacing: 4
                 Layout.fillWidth: true
@@ -504,7 +530,8 @@ AbstractBackgroundWidget {
                     model: [
                         { label: "Meses", icon: "calendar_month", key: "showMonthLabels", on: root.cfgShowMonthLabels },
                         { label: "Leyenda", icon: "info", key: "showLegend", on: root.cfgShowLegend },
-                        { label: "Total", icon: "tag", key: "showTotal", on: root.cfgShowTotal }
+                        { label: "Total", icon: "tag", key: "showTotal", on: root.cfgShowTotal },
+                        { label: "Avatar", icon: "person", key: "showAvatar", on: root.cfgShowAvatar }
                     ]
                     SelectionGroupButton {
                         required property var modelData
@@ -569,19 +596,27 @@ AbstractBackgroundWidget {
                     onValueModified: root.saveConfig("refreshMinutes", value)
                 }
             }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 300
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: ColorUtils.applyAlpha(Appearance.colors.colOnLayer2, 0.7)
+                text: "El tamaño es proporcional. ¿Muy ancho? Baja las semanas arriba."
+            }
         }
     }
 
-    // ── Fondo (tokens, sin colores fijos) ───────────────────────────
     Rectangle {
         anchors.fill: parent
         radius: root.cfgSurfaceStyle === "pill" ? Appearance.rounding.full
             : root.cornerRadiusOverride >= 0 ? root.cornerRadiusOverride : Appearance.rounding.normal
-        color: root.cfgSurfaceStyle === "minimal" || root.cfgSurfaceStyle === "outline" ? "transparent"
-            : ColorUtils.applyAlpha(root.colText, root.cfgSurfaceStyle === "card"
-                ? Math.max(root.backgroundOpacity, 0.10) : Math.max(root.backgroundOpacity, 0.06))
-        border.width: root.cfgSurfaceStyle === "outline" ? Math.max(1, root.borderWidth) : 0
-        border.color: ColorUtils.applyAlpha(root.colText, Math.max(root.borderOpacity, 0.16))
+        color: !root.solidSurface ? "transparent"
+            : ColorUtils.applyAlpha(Appearance.colors.colLayer1, Math.max(root.backgroundOpacity, 0.75))
+        border.width: root.cfgSurfaceStyle === "outline" ? Math.max(1, root.borderWidth)
+            : root.solidSurface ? 1 : 0
+        border.color: ColorUtils.applyAlpha(root.fg, Math.max(root.borderOpacity, 0.18))
 
         Behavior on color {
             enabled: Appearance.animationsEnabled
@@ -592,34 +627,45 @@ AbstractBackgroundWidget {
         }
     }
 
-    // ── Contenido ───────────────────────────────────────────────────
-    Column {
+    ColumnLayout {
         id: contentColumn
         anchors.left: parent.left
+        anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: root.pad
         spacing: root.itemSpacing
-        width: parent.width - root.pad * 2
 
-        // Cabecera: avatar + usuario/total + refrescar
         RowLayout {
             visible: root.hasUsername
-            width: parent.width
+            Layout.fillWidth: true
             spacing: Math.round(8 * root.scaleFactor)
 
-            Rectangle {
+            Item {
+                visible: root.cfgShowAvatar
                 Layout.preferredWidth: Math.round(28 * root.scaleFactor)
                 Layout.preferredHeight: Math.round(28 * root.scaleFactor)
                 Layout.alignment: Qt.AlignVCenter
-                radius: width / 2
-                clip: true
-                color: ColorUtils.applyAlpha(root.colText, 0.10)
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "person"
-                    iconSize: Math.round(16 * root.scaleFactor)
-                    color: ColorUtils.applyAlpha(root.colText, 0.8)
+
+                Rectangle {
+                    id: avatarMask
+                    anchors.fill: parent
+                    radius: width / 2
+                    visible: false
                 }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: ColorUtils.applyAlpha(root.fg, 0.10)
+                    visible: avatarImg.status !== Image.Ready
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "person"
+                        iconSize: Math.round(16 * root.scaleFactor)
+                        color: ColorUtils.applyAlpha(root.fg, 0.8)
+                    }
+                }
+
                 Image {
                     id: avatarImg
                     anchors.fill: parent
@@ -628,8 +674,14 @@ AbstractBackgroundWidget {
                     mipmap: true
                     cache: true
                     asynchronous: true
+                    sourceSize.width: 56
+                    sourceSize.height: 56
                     source: root.hasUsername ? "https://github.com/" + root.cfgUsername + ".png?size=56" : ""
                     visible: status === Image.Ready
+                    layer.enabled: status === Image.Ready
+                    layer.effect: GE.OpacityMask {
+                        maskSource: avatarMask
+                    }
                     onStatusChanged: if (status === Image.Error) visible = false
                 }
             }
@@ -643,7 +695,7 @@ AbstractBackgroundWidget {
                     text: "@" + root.cfgUsername
                     font.pixelSize: Math.round(Appearance.font.pixelSize.small * root.scaleFactor)
                     font.weight: Font.Medium
-                    color: root.colText
+                    color: root.fg
                     elide: Text.ElideRight
                 }
                 StyledText {
@@ -651,7 +703,7 @@ AbstractBackgroundWidget {
                     text: root.loading ? "Cargando…" : formatTotal(root.totalContributions) + " contribuciones"
                     font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor)
                     font.family: Appearance.font.family.numbers
-                    color: ColorUtils.applyAlpha(root.colText, 0.65)
+                    color: ColorUtils.applyAlpha(root.fg, 0.65)
                 }
             }
 
@@ -663,29 +715,28 @@ AbstractBackgroundWidget {
                 enabled: root.canRefresh
                 opacity: enabled ? 1 : 0.35
                 colBackground: "transparent"
-                colBackgroundHover: ColorUtils.applyAlpha(root.colText, 0.08)
-                colRipple: ColorUtils.applyAlpha(root.colText, 0.12)
+                colBackgroundHover: ColorUtils.applyAlpha(root.fg, 0.08)
+                colRipple: ColorUtils.applyAlpha(root.fg, 0.12)
                 downAction: () => root.requestRefresh(true)
                 contentItem: MaterialSymbol {
                     anchors.centerIn: parent
                     text: "refresh"
                     iconSize: Math.round(16 * root.scaleFactor)
-                    color: ColorUtils.applyAlpha(root.colText, 0.85)
+                    color: ColorUtils.applyAlpha(root.fg, 0.85)
                 }
                 StyledToolTip { text: "Actualizar ahora" }
             }
         }
 
-        // Estado vacío: CTA para configurar
         ColumnLayout {
             visible: root.showEmptyState
-            width: parent.width
+            Layout.fillWidth: true
             spacing: Math.round(6 * root.scaleFactor)
             MaterialSymbol {
                 Layout.alignment: Qt.AlignHCenter
                 text: "person_add"
                 iconSize: Math.round(28 * root.scaleFactor)
-                color: ColorUtils.applyAlpha(root.colText, 0.55)
+                color: ColorUtils.applyAlpha(root.fg, 0.55)
             }
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
@@ -695,7 +746,7 @@ AbstractBackgroundWidget {
                 text: "Configura tu usuario de GitHub"
                 font.pixelSize: Math.round(Appearance.font.pixelSize.small * root.scaleFactor)
                 font.weight: Font.Medium
-                color: root.colText
+                color: root.fg
             }
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
@@ -704,14 +755,13 @@ AbstractBackgroundWidget {
                 wrapMode: Text.Wrap
                 text: "Entra en modo edición del widget para escribir tu usuario."
                 font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor)
-                color: ColorUtils.applyAlpha(root.colText, 0.6)
+                color: ColorUtils.applyAlpha(root.fg, 0.6)
             }
         }
 
-        // Estado de error con reintento
         ColumnLayout {
             visible: root.showErrorState
-            width: parent.width
+            Layout.fillWidth: true
             spacing: Math.round(6 * root.scaleFactor)
             MaterialSymbol {
                 Layout.alignment: Qt.AlignHCenter
@@ -726,7 +776,7 @@ AbstractBackgroundWidget {
                 wrapMode: Text.Wrap
                 text: root.stateText
                 font.pixelSize: Math.round(Appearance.font.pixelSize.small * root.scaleFactor)
-                color: root.colText
+                color: root.fg
             }
             RippleButton {
                 Layout.alignment: Qt.AlignHCenter
@@ -749,10 +799,9 @@ AbstractBackgroundWidget {
             }
         }
 
-        // Indicador de carga (solo cuando hay usuario)
         RowLayout {
             visible: root.loading && root.hasUsername
-            width: parent.width
+            Layout.fillWidth: true
             spacing: Math.round(6 * root.scaleFactor)
             opacity: root.loading ? 1 : 0
             Behavior on opacity {
@@ -762,7 +811,7 @@ AbstractBackgroundWidget {
             MaterialSymbol {
                 text: "progress_activity"
                 iconSize: Math.round(14 * root.scaleFactor)
-                color: ColorUtils.applyAlpha(root.colText, 0.7)
+                color: ColorUtils.applyAlpha(root.fg, 0.7)
                 RotationAnimation on rotation {
                     running: root.loading && Appearance.animationsEnabled
                     loops: Animation.Infinite
@@ -774,11 +823,10 @@ AbstractBackgroundWidget {
             StyledText {
                 text: "Cargando contribuciones…"
                 font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor)
-                color: ColorUtils.applyAlpha(root.colText, 0.7)
+                color: ColorUtils.applyAlpha(root.fg, 0.7)
             }
         }
 
-        // Etiquetas de mes
         Row {
             visible: root.cfgShowMonthLabels && root.hasData
             spacing: root.cellSpacing
@@ -787,18 +835,17 @@ AbstractBackgroundWidget {
                 Item {
                     required property string modelData
                     width: root.cellSize
-                    height: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor)
+                    height: Math.round(Appearance.font.pixelSize.smaller * root.microTextScale)
                     clip: true
                     StyledText {
                         text: parent.modelData
-                        font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor * 0.85)
-                        color: ColorUtils.applyAlpha(root.colText, 0.6)
+                        font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.microTextScale * 0.85)
+                        color: ColorUtils.applyAlpha(root.fg, 0.6)
                     }
                 }
             }
         }
 
-        // Grid de contribuciones
         Row {
             visible: root.hasData
             spacing: root.cellSpacing
@@ -816,7 +863,7 @@ AbstractBackgroundWidget {
                             radius: Math.max(2, Math.round(root.cellSize * 0.25))
                             color: modelData ? root.levelColor(modelData.level) : "transparent"
                             border.width: cellHover.containsMouse && modelData ? 1 : 0
-                            border.color: ColorUtils.applyAlpha(root.colText, 0.5)
+                            border.color: ColorUtils.applyAlpha(root.fg, 0.5)
 
                             Behavior on color {
                                 enabled: Appearance.animationsEnabled
@@ -838,15 +885,14 @@ AbstractBackgroundWidget {
             }
         }
 
-        // Leyenda + última actualización
         RowLayout {
             visible: root.cfgShowLegend && root.hasData
-            width: parent.width
+            Layout.fillWidth: true
             spacing: Math.round(4 * root.scaleFactor)
             StyledText {
                 text: "Menos"
-                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor * 0.85)
-                color: ColorUtils.applyAlpha(root.colText, 0.6)
+                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.microTextScale * 0.85)
+                color: ColorUtils.applyAlpha(root.fg, 0.6)
                 Layout.alignment: Qt.AlignVCenter
             }
             Row {
@@ -865,17 +911,17 @@ AbstractBackgroundWidget {
             }
             StyledText {
                 text: "Más"
-                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor * 0.85)
-                color: ColorUtils.applyAlpha(root.colText, 0.6)
+                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.microTextScale * 0.85)
+                color: ColorUtils.applyAlpha(root.fg, 0.6)
                 Layout.alignment: Qt.AlignVCenter
             }
             Item { Layout.fillWidth: true }
             StyledText {
                 visible: root.lastUpdatedText !== ""
                 text: "· " + root.lastUpdatedText
-                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.scaleFactor * 0.85)
+                font.pixelSize: Math.round(Appearance.font.pixelSize.smaller * root.microTextScale * 0.85)
                 font.family: Appearance.font.family.numbers
-                color: ColorUtils.applyAlpha(root.colText, 0.45)
+                color: ColorUtils.applyAlpha(root.fg, 0.45)
                 Layout.alignment: Qt.AlignVCenter
             }
         }

@@ -22,6 +22,7 @@
     "showMonthLabels": true,
     "showLegend": true,
     "showTotal": true,
+    "showAvatar": true,
     "refreshMinutes": 60,
     "surfaceStyle": "card",
     "padding": 12,
@@ -44,6 +45,7 @@
     "showMonthLabels": { "type": "bool", "default": true, "label": "Show month labels" },
     "showLegend": { "type": "bool", "default": true, "label": "Show legend" },
     "showTotal": { "type": "bool", "default": true, "label": "Show total" },
+    "showAvatar": { "type": "bool", "default": true, "label": "Show avatar" },
     "refreshMinutes": { "type": "int", "default": 60, "min": 5, "max": 720, "step": 5, "label": "Refresh (minutes)" },
     "surfaceStyle": {
       "type": "string",
@@ -60,5 +62,5 @@
     "spacing": { "type": "int", "default": 8, "min": 0, "max": 32, "step": 1, "label": "Spacing" }
   },
   "resizableAxes": { "uniform": "widgetScale" },
-  "defaultSize": { "width": 560, "height": 190 }
+  "defaultSize": { "width": 760, "height": 200 }
 }
