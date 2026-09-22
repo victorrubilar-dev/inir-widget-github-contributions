@@ -40,6 +40,21 @@ AbstractBackgroundWidget {
     readonly property int minRefreshMinutes: 5
     readonly property int maxRefreshMinutes: 720
 
+    // ── Edit-mode stacking fix ─────────────────────────────────────────
+    // AbstractBackgroundWidget raises desktopStackZ to 10000 while the widget
+    // is selected (1000+index once promoted to background.widgets.layerOrder),
+    // and Background.qml stamps that value on the widget's loader inside
+    // WidgetCanvas. The edit-mode chrome — the floating controls bar with the
+    // grid/manage/done buttons — lives there at z: 200, so a promoted or
+    // selected widget painted right over the main edit bar, while plain
+    // unselected widgets (low z) stayed underneath it.
+    // Redefining the inherited property here caps this widget below the chrome:
+    // still above every plain widget, never over the edit bar. Verified that a
+    // derived declaration wins over the base type (qmllint property-override
+    // warning only; loader z binds to this instance's value).
+    readonly property int desktopStackZ: root.editSelected
+        ? 199 : Math.min(199, root.desktopPersistentZ)
+
     readonly property var classicPalette: ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"]
 
     readonly property string cfgSurfaceStyle: _readConfigKey("surfaceStyle") ?? "card"
